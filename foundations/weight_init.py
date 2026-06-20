@@ -8,6 +8,8 @@ class Solution:
 
     def xavier_init(self, fan_in: int, fan_out: int) -> List[List[float]]:
         # Return a (fan_out x fan_in) weight matrix using Xavier/Glorot normal initialization
+        # Use torch.manual_seed(0) for reproducibility
+        # Round to 4 decimal places and return as nested list
         torch.manual_seed(0)
         std = math.sqrt(2.0 / (fan_in + fan_out))
         weights = torch.randn(fan_out, fan_in) * std
@@ -15,39 +17,48 @@ class Solution:
 
     def kaiming_init(self, fan_in: int, fan_out: int) -> List[List[float]]:
         # Return a (fan_out x fan_in) weight matrix using Kaiming/He normal initialization (for ReLU)
+        # Use torch.manual_seed(0) for reproducibility
+        # Round to 4 decimal places and return as nested list
         torch.manual_seed(0)
         std = math.sqrt(2.0 / fan_in)
         weights = torch.randn(fan_out, fan_in) * std
         return torch.round(weights, decimals=4).tolist()
 
     def check_activations(self, num_layers: int, input_dim: int, hidden_dim: int, init_type: str) -> List[float]:
-        # Set seed once at the start
+        # Forward random input through num_layers with the given init_type.
+        # Use torch.manual_seed(0) once at the start.
+        # Return the std of activations after each layer, rounded to 2 decimals.
+        # Set seed ONCE at the start so the RNG stream flows continuously
         torch.manual_seed(0)
         
-        # Track dimensions across all layers
-        dims = [input_dim] + [hidden_dim] * num_layers
+        # 1. Build weight matrices first
         weights = []
+        current_in = input_dim
         
-        # 1. First, generate ALL weight matrices to match the expected RNG order
-        for i in range(num_layers):
-            if init_type == "kaiming":
-                std = math.sqrt(2.0 / dims[i])
-            elif init_type == "xavier":
-                std = math.sqrt(2.0 / (dims[i] + dims[i + 1]))
+        for _ in range(num_layers):
+            if init_type == "xavier":
+                std = math.sqrt(2.0 / (current_in + hidden_dim))
+            elif init_type == "kaiming":
+                std = math.sqrt(2.0 / current_in)
+            elif init_type == "random":
+                std = 1.0
             else:
                 std = 1.0
                 
-            w = torch.randn(dims[i + 1], dims[i]) * std
+            w = torch.randn(hidden_dim, current_in) * std
             weights.append(w)
+            current_in = hidden_dim
             
-        # 2. Next, generate the random input tensor
+        # 2. Forward a random input through them
         x = torch.randn(1, input_dim)
         stds = []
         
-        # 3. Finally, execute the sequential forward passes
+        # 3. Linear + ReLU per layer
         for w in weights:
-            x = x @ w.t()
+            x = torch.matmul(x, w.t())
             x = torch.relu(x)
+            
+            # Record standard deviation rounded to 2 decimals
             stds.append(round(x.std().item(), 2))
             
         return stds
